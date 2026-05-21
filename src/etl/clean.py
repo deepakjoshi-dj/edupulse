@@ -14,11 +14,24 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
 PROC = ROOT / "data" / "processed"
+
+
+def _write_parquet(df: pd.DataFrame, path: Path) -> None:
+    """Write a DataFrame to parquet using DuckDB's native writer.
+
+    Avoids the pyarrow dependency, which is hard to build from source on
+    Streamlit Cloud images that lack matching prebuilt wheels.
+    """
+    con = duckdb.connect(":memory:")
+    con.register("df_view", df)
+    con.execute(f"COPY (SELECT * FROM df_view) TO '{path.as_posix()}' (FORMAT PARQUET)")
+    con.close()
 
 
 def _read(name: str) -> pd.DataFrame:
@@ -110,7 +123,7 @@ def main() -> int:
         print(f"Cleaning {name} ...", flush=True)
         df = fn()
         out = PROC / f"{name}.parquet"
-        df.to_parquet(out, index=False)
+        _write_parquet(df, out)
         print(f"  → {out.name}  rows={len(df):,}  cols={df.shape[1]}")
     print("Done. Cleaned tables saved to", PROC)
     return 0
