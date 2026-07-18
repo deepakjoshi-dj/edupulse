@@ -49,7 +49,14 @@ def load_features() -> pd.DataFrame:
     if not DB.exists():
         raise SystemExit("Warehouse not built — run src/etl/build_warehouse.py first.")
     con = duckdb.connect(str(DB), read_only=True)
-    df = con.execute("SELECT * FROM v_student_features").df()
+    # ORDER BY makes the row order deterministic across runs (DuckDB makes no
+    # guarantees on view scan order otherwise). Without this, the train/test
+    # split produced by random_state=42 can drift between training and any
+    # later re-evaluation that re-reads the view.
+    df = con.execute(
+        "SELECT * FROM v_student_features "
+        "ORDER BY id_student, code_module, code_presentation"
+    ).df()
     con.close()
     return df
 
